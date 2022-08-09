@@ -1,0 +1,118 @@
+import pandas as pd
+import scipy.io
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from scipy.interpolate import splrep, splev
+import numpy as np
+
+def smooth_ployline(cv_init, point_num=1000):
+    cv = cv_init
+    list_x = cv[:, 0]
+    list_y = cv[:, 1]
+    if type(cv) is not np.ndarray:
+        cv = np.array(cv)
+    delta_cv = cv[1:, ] - cv[:-1, ]
+    s_cv = np.linalg.norm(delta_cv, axis=1)
+
+    s_cv = np.array([0] + list(s_cv))
+    s_cv = np.cumsum(s_cv)
+    bspl_x = splrep(s_cv, list_x, s=0.1)
+    bspl_y = splrep(s_cv, list_y, s=0.1)
+    # values for the x axis
+    s_smooth = np.linspace(0, max(s_cv), point_num)
+    # get y values from interpolated curve
+    x_smooth = splev(s_smooth, bspl_x)
+    y_smooth = splev(s_smooth, bspl_y)
+    new_cv = np.array([x_smooth, y_smooth]).T
+    delta_new_cv = new_cv[1:, ] - new_cv[:-1, ]
+    s_accumulated = np.cumsum(np.linalg.norm(delta_new_cv, axis=1))
+    s_accumulated = np.concatenate(([0], s_accumulated), axis=0)
+    return new_cv, s_accumulated
+
+def get_central_vertices(pts):
+    cv_init = np.array(pts)
+    cv_smoothed, s_accumulated = smooth_ployline(cv_init)
+    return cv_smoothed
+
+
+connect_line01 = get_central_vertices([[0,0], [100,0], [500,0], [600,0], [804,0]])  ## start 场景01连接处
+line1 = get_central_vertices([[804,0], [1100,0], [1300,0], [1453,0]])  ## 场景1
+connect_line12 = get_central_vertices([[1453,0], [1600,0], [1800,0], [1900,0]])  ## 场景12连接线
+line2 = get_central_vertices([[1943,0], [2288,0], [2388,0], [2547,0]])  ## 场景2
+#connect_line23 = get_central_vertices([])
+line3 = get_central_vertices([[3384,43.88], [3384.5, 43.88], [3384, 43.88], [3386, 44], [3490, 47.5], [3500, 47.5], [3525, 47.5],
+                              [3550, 47.5], [3570,47.5], [3585,47.5], [3600,47.5], [3640,47.5],[3670, 47.5], [3700,47], [3730, 46.5], [3760, 46],
+                              [3790, 45.4], [3820, 45], [3850, 44.2], [3880, 43.88], [3900, 43.88], [3910, 43.88],
+                              [3915, 43.88], [3918, 43.88], [3923,43.88]])  ## 场景3 变道再变回来
+#connect_line34 = get_central_vertices()
+line4 = get_central_vertices([[4858, -38.52], [5000, -38.52], [5200, -38.52], [5484, -38.52]])  ## 场景4
+#connect_line45 = get_central_vertices()
+line5 = get_central_vertices([[6562,-85.91], [6600,-85.91], [6700, -85.91], [6761.47, -85.91], [6776.5, -85.9154], [6783.59, -85.9154],
+                              [6785.62,-85.9043], [6787.7, -85.7367], [6790.91, -85.4161], [6793.06, -84.8385], [6797.06,-82.7133], [6799.52,-80.3448],
+                              [6802.15,-75.3456], [6802.81,-72.1181], [6802.91,-71.053], [6803.04,-67.9297], [6803, -62],
+                              [6803, -59.1664], [6803, -47], [6803, -0], [6803,61]])  ## 场景5
+connect_line56_p1 = get_central_vertices([[6803.21, 61], [6803.21, 166], [6803.21, 366], [6803.21,505]])  ## 场景56连接处
+connect_line56_p2 = get_central_vertices([[6803.21,505], [6804.4, 520], [6805.7, 535], [6806.99,550]])
+connect_line56_p3 = get_central_vertices([[6806.99,550], [6807, 660], [6807.5, 770],[6807.88,885]])
+connect_line56 = np.vstack((np.vstack((connect_line56_p1, connect_line56_p2)), connect_line56_p3))
+line6 = get_central_vertices([[6807.88,885], [6806.88,1100], [6805.88,1300],  [6804.38, 1547]])  ## 场景6
+#connect_line67_p0
+#connect_line67_p1 = get_central_vertices([[]])
+connect_line67_p2 = get_central_vertices([[6790.31,2990.31], [6792.31, 3021.74], [6794.97,3030.19], [6799.26, 3040.04], [6806.1,3050.71],
+                                           [6814.69, 3060.69], [6828.11, 3069.76], [6858.71,3079.01], [6872.36,3078.74], [6885.73,3075.95],
+                                           [6900.05,3069.78], [6912.01, 3061.36], [6922.07,3050.74], [6929.81,3038.33], [6934.93,3024.63],
+                                           [6937.28,3009.21], [6936.61,2995.58], [6933.1, 2981.38], [6926.84,2968.16], [6918.08,2956.45],
+                                           [6906.37,2946.14], [6894.54, 2939.33], [6880.69,2934.62], [6851.22, 2932.3]])
+connect_line67_p3 = get_central_vertices([[6851.22,2932.31], [6700, 2932.31], [6600, 2932.31], [6337.34, 2932.53]])
+connect_line67 = np.vstack((connect_line67_p2, connect_line67_p3))
+line7 = get_central_vertices([[6337.34, 2932.53], [6117,2931.4475], [5894,2930.365], [5674,2929.2825], [5450,2928.78]])  ## 场景7 （假设场景开始就是弯道 且弯道曲率恒定）
+connect_line78 = get_central_vertices([[5449,2928.78], [5000,2928.79], [4500,2928.79],[4000, 2928.78], [3889, 2928.78]])
+line8 = get_central_vertices([[3888, 2928.8], [3200, 2928.78], [2700, 2928.76], [2209.51, 2928.74]])
+connect_line89_p1 = get_central_vertices([[2209,2928.3], [1000,2928.3], [0,2928.3], [-439,2928.3]])
+connect_line89_p2 = get_central_vertices([[-439,2928.31], [-473,2930.1], [-500, 2931],[-507,2932.05]])
+connect_line89_p3 = get_central_vertices([[-507,2932.05], [-530,2932.05], [-550,2932.05], [-588,2932.07]])
+connect_line89 = np.vstack((np.vstack((connect_line89_p1, connect_line89_p2)), connect_line89_p3))
+line9 = get_central_vertices([[-558, 2932.07], [-600, 2932], [-686.645, 2935.27], [-688.516,2935.82], [-691.293,2936.74],
+                              [-694.032, 2937.77], [-695.834, 2938.51], [-698.498,2939.72], [-700.246, 2940.58], [-702.824, 2941.96],
+                              [-704.511, 2942.94], [-706.171, 2943.96], [-707.804, 2945.03], [-710.198,2946.71],
+                              [-714.774,2950.35], [-717.657,2952.98], [-719.725, 2955.05], [-722.983, 2958.67], [-728.739, 2966.53],
+                              [-733.802, 2975.98], [-738.159, 2988.89], [-739.66,2997.53], [-740.118, 3005.31], [-739.247,3016.97],
+                              [-735.902,3030.18], [-731.585, 3039.99], [-727.454,3048.27], [-720.931, 3055.08], [-715.368,3060.55],
+                              [-707.649,3066.49], [-699.207,3071.36], [-694.763,3073.36], [-690.194, 3075.06], [-684.578,3076.69],
+                              [-677.887,3078.02], [-670.126,3078.72], [-665.253, 3078.81], [-657.479,3078.21], [-652.671,3077.42],
+                              [-646.05,3075.77], [-640.518,3073.87], [-636.036,3071.96], [-632.548,3070.21], [-628.328,3067.77],
+                              [-624.176,3062.7], [-619.672,3061.46], [-616.064, 3058.18], [-611.395,3053.21], [-607.777,3048.61], [-604.538, 3043.74],
+                              [-600.434,3035.99], [-596.999, 3026.87], [-595.745, 3022.16], [-595.745, 3022.16], [-593.21, 2994.47],
+                              [-593.21, 2900], [-593.21, 2870], [-593.21, 2850]])  ## 从722.983间隔变大
+#connect_line910_p1 = get_central_vertices([])
+
+line10 = get_central_vertices([[-864, 2005.42], [-1000, 2005.42], [-1200, 2005.42], [-1419, 2005.42]])  ## 场景10
+connect_line1011 = get_central_vertices([[-1419.2,2005.42], [-1450, 2005.42], [-1500, 2005.42], [-1550, 2005.42], [-1570,2005.42]])  ## 场景10 到终点
+
+plt.figure()
+plt.plot(line1[:,0], line1[:,1], c='g')
+plt.plot(line2[:,0], line2[:,1], c='g')
+plt.plot(line3[:,0], line3[:,1], c='g')
+plt.plot(line4[:,0], line4[:,1], c='g')
+plt.plot(line5[:,0], line5[:,1], c='g')
+plt.plot(line6[:,0], line6[:,1], c='g')
+plt.plot(line7[:,0], line7[:,1], c='g')
+plt.plot(line8[:,0], line8[:,1], c='g')
+plt.plot(line9[:,0], line9[:,1], c='g')
+plt.plot(line10[:,0], line10[:,1], c='g')
+
+plt.plot(connect_line01[:,0], connect_line01[:,1], c='b')
+plt.plot(connect_line12[:,0], connect_line12[:,1], c='b')
+#plt.plot(connect_line23[:,0], connect_line23[:,1], c='b')
+#plt.plot(connect_line34[:,0], connect_line34[:,1], c='b')
+#plt.plot(connect_line45[:,0], connect_line45[:,1], c='b')
+plt.plot(connect_line56[:,0], connect_line56[:,1], c='b')
+plt.plot(connect_line67[:,0], connect_line67[:,1], c='b')
+plt.plot(connect_line78[:,0], connect_line78[:,1], c='b')
+plt.plot(connect_line89[:,0], connect_line89[:,1], c='b')
+#plt.plot(connect_line910[:,0], connect_line910[:,1], c='b')
+plt.plot(connect_line1011[:,0], connect_line1011[:,1], c='b')
+
+plt.show()
+
+
