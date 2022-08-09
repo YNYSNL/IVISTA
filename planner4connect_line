@@ -1,0 +1,95 @@
+import numpy as np
+from matplotlib import pyplot as plt
+from scipy.interpolate import splrep, splev
+import math
+### 注释在最后
+def calculate_curvature(x_value: np.ndarray, y_value: np.ndarray):
+    """计算曲率"""
+    x_t = np.gradient(x_value)
+    y_t = np.gradient(y_value)
+    xx_t = np.gradient(x_t)
+    yy_t = np.gradient(y_t)
+    curvature_val = np.abs(xx_t * y_t - x_t * yy_t) / (x_t * x_t + y_t * y_t) ** 1.5
+    norm1 = y_t / (x_t * x_t + y_t * y_t) ** 0.5
+    norm2 = -x_t / (x_t * x_t + y_t * y_t) ** 0.5
+    return curvature_val, [norm1, norm2]  ## 曲率 曲率圆心
+
+def get_curvature(cv, state, wheel):
+    dis = ((cv[0] - state[0])**2 + (cv[1] - state[1])**2) ** 0.5
+    index = np.argmin(dis)
+    plt.scatter(cv[0][index], cv[1][index], c='g')
+    return wheel[index]
+
+def get_theta(cv, state, wheel):
+    theta_list = np.linspace(0, math.pi/3, 1000)  ####
+    dis = state[3] * 0.1
+    theta_now = state[2]
+    # print('theta now', theta_now)
+    curvature = get_curvature(cv, state, wheel)
+    ka_4_theta = []  ## 记录下不同theta下的曲率和圆心
+    no_4_theta = []
+    for theta in theta_list:
+        if curvature > 0:
+            theta = -theta
+        scatter1 = [state[0] + np.cos(theta_now + 0.5*theta) * dis, state[1] + np.sin(theta_now + 0.5*theta) * dis]
+        scatter2 = [scatter1[0] + np.cos(theta_now + 2 * 0.5*theta) * dis,
+                        scatter1[1] + np.sin(theta_now + 2 * 0.5*theta) * dis]
+        x = np.array([state[0], scatter1[0], scatter2[0]])  ## 一共生成三个散点 用以计算曲率
+        y = np.array([state[1], scatter1[1], scatter2[1]])
+        kappa, norm = calculate_curvature(x, y)  ## 针对这三个散点会生成三个kappa 但是后两个没有后续散点所以 np.gradient不准 只用第一个
+        ka_4_theta.append(kappa[0])
+        no_4_theta.append(norm[0])
+        #print(x,y)
+    #print(ka_4_theta)
+    #print(curvature)
+    index = np.argmin([abs(kappa - curvature) for kappa in ka_4_theta])
+    print('与实际的曲率差距为', np.min([abs(kappa-curvature) for kappa in ka_4_theta]))
+    theta = theta_list[index]
+    return theta
+
+def ki_model(cv, state, wheel):
+    curvature = get_curvature(cv, state, wheel)  ## 找当前位置的曲率
+    theta = get_theta(cv, state, wheel)  ## 通过当前位置的曲率计算转角
+    state_now = np.zeros_like(state)
+    v = state[3]  ## 根据转角更新位置
+    if curvature > 0:
+        theta = - theta
+    else:
+        theta = theta
+    state_now[2] = state[2] + theta * 0.1  # θ'=θ+Ω*Dt
+    state_now[0] = state[0] + v * math.cos(state_now[2]) * 0.1  # x'=x+v*cos(θ)*Dt
+    state_now[1] = state[1] + v * math.sin(state_now[2]) * 0.1  # y'=y+v*sin(θ)*Dt
+    state_now[3] = state[3]
+    return state_now
+
+def main(rx, ry, state0, simulation_times):
+    kappa, norm = calculate_curvature(rx, ry)  ### 得到曲率
+    cv = np.vstack((rx, ry))
+    print(kappa)
+    plt.figure()
+    plt.plot(cv[0], cv[1])
+    plt.ion()
+    state_now = state0
+    for step in range(simulation_times):
+        state = ki_model(cv, state_now, kappa)
+        state_now = state
+        plt.scatter(state_now[0], state_now[1], s=5, c='r')
+        plt.pause(0.05)
+    plt.show()
+
+path_data = np.loadtxt(r'C:\Users\房世玉\PycharmProjects\Lattice\roadMap_lzjSouth1.txt')  ### 参考轨迹数据集合 只需要x y
+simulation_times = 200
+rl_x = path_data[:, 1] * 100  ## txt的曲率在0.3左右 *100使曲率在0.003与仿真环境类似
+rl_y = path_data[:, 2] * 100
+state0 = [rl_x[0], rl_y[0], 1 * math.pi, 250]  ## 2.5m/s同比放大100
+main(rl_x, rl_y, state0, simulation_times)
+
+#### 输入参考轨迹xy 初状态 仿真次数
+# 参考轨迹仅用于计算曲率 进一步用get_curvature 得到ego车在某一位置时对应的道路曲率 完全模拟仿真环境（只有当前位置道路曲率，ego的x、y、v、theta）
+# get_theta 在np.linspace(0, math.pi/2, 1000)中计算ego车以各个theta角转弯时的曲率 并且取与该点真实道路曲率（line88结果）最接近的theta作为转弯角度
+# ki_model 动力学模型使车辆转弯theta得到下一时刻ego位置
+# 循环line88-90
+
+
+## 运行可以发现 theta转向角与真实曲率差距很小 说明能找到合适的转向角
+## 结果是一样的问题 发现转不过来（特别是曲率大时） 原因很可能是ki_model？
