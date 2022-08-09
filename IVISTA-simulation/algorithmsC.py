@@ -657,7 +657,7 @@ class LocalPlanner:
     def __JudgeStatus(self, traj_point, path_points, obstacles,
                       samp_basis):  ### 赋值self.status和self.dist_prvw和self.to_Stop# 分别表示车辆的位置关系 最小的采样距离
         colli = 0
-        global delta_t, sight_range  ### 每帧时长 可视距离(sight_range下有无障碍物)
+        global delta_t, sight_range, brake_dist  ### 每帧时长 可视距离(sight_range下有无障碍物)
         path_point_end = self.path_points[-1]
         if path_point_end.rs - self.traj_point.matched_point.rs <= samp_basis.dist_prvw:  ### 如果快到参考轨迹的末端了(小于最小采样空间的距离) 则准备停车
             self.to_stop = True  # stopping
@@ -665,18 +665,29 @@ class LocalPlanner:
         else:
             self.to_stop = False  # cruising
             self.dist_prvw = samp_basis.dist_prvw
+        colli_obs_list = []
+        colli_dist_list = []
         for obstacle in self.obstacles:
             if obstacle.matched_point.rs < self.traj_point.matched_point.rs - 2:  ### 障碍物的match_point小于车辆当前match_point
                 continue
-            if Dist(obstacle.x, obstacle.y, self.traj_point.x, self.traj_point.y) > sight_range:  ### 距离大于可视距离
+            if Dist(obstacle.matched_point.rx, obstacle.matched_point.ry, self.traj_point.x, self.traj_point.y) > sight_range:  ### 距离大于可视距离
                 # 只看眼前一段距离
+                continue
+            if Dist(obstacle.matched_point.rx, obstacle.matched_point.ry, obstacle.x, obstacle.y) > obs_lat_range:
+                # 障碍物到其match point的距离
                 continue
             temp = TrajObsFree(self.path_points, obstacle, delta_t)
             if not temp[1]:  ### 有碰撞 指的是障碍物与参考轨迹是否有碰撞(即是否重合)
                 colli = 1
-                colli_obs = obstacle
-                colli_match_point = obstacle.matched_point
-                break
+                colli_obs_list.append(obstacle)
+                colli_dist_list.append(Dist(obstacle.matched_point.rx, obstacle.matched_point.ry, self.traj_point.x, self.traj_point.y))
+                # break
+                ### 为什么现在不能直接break 因为如果我们障碍物的顺序是[obs1(10m), obs2(5m)] 则检测到obs1就会进入wait 可能忽略更危险的obs2 2022/8/8 20.00
+        if colli_obs_list != []:
+            index = colli_dist_list.index(min(colli_dist_list))
+            colli_obs = colli_obs_list[index]
+            colli_match_point = colli_obs.matched_point
+
         if colli == 0:
             if traj_point.IsOnPath():  ### 车辆现在在不在参考轨迹上(标准为traj的match_point与当前traj的距离是否小于0.5m)
                 self.status = "following_path"
@@ -690,7 +701,7 @@ class LocalPlanner:
                 self.dist_prvw = colli_match_point.rs - traj_point.matched_point.rs
                 if self.dist_prvw < sight_range:  # 距离小于可视距离(10m)进入减速
                     self.status = 'wait'
-                if self.dist_prvw < 5:  # 距离小于5m进入刹车
+                if self.dist_prvw < brake_dist:  # 距离小于5m进入刹车
                     self.status = 'brake'
 
     def __LatticePlanner(self, traj_point, path_points, obstacles, samp_basis):
@@ -731,8 +742,11 @@ class LocalPlanner:
                         for obstacle in self.obstacles:
                             if obstacle.matched_point.rs < self.traj_point.matched_point.rs - 2:
                                 continue
-                            if Dist(obstacle.x, obstacle.y, traj_point.x, traj_point.y) > sight_range:
+                            if Dist(obstacle.matched_point.rx, obstacle.matched_point.ry, traj_point.x, traj_point.y) > sight_range:
                                 # 只看眼前一段距离
+                                continue
+                            if Dist(obstacle.matched_point.rx, obstacle.matched_point.ry, obstacle.x, obstacle.y) > obs_lat_range:
+                                # 障碍物到其match point的距离
                                 continue
                             plt.gca().add_patch(
                                 plt.Rectangle((obstacle.corner[0], obstacle.corner[1]), obstacle.length, obstacle.width,
@@ -880,8 +894,8 @@ class LocalPlanner:
             quit()
 
 
-def Moving_obstacle(obstacle_info, past_time, total_t=10):
-    num_points = total_t / delta_t
+def Moving_obstacle(obstacle_info, past_time, total_t=5):
+    num_points = total_t / delta_t  
     obstacles = []
     for point in range(int(num_points)):
         point += 1
@@ -919,6 +933,8 @@ print(tp_rst.x, tp_rst.y, tp_rst.v, tp_rst.a, tp_rst.theta, tp_rst.kappa)
 delta_t = 0.1 * 1  # fixed time between two consecutive trajectory points, sec
 v_tgt = 10  # fixed target speed, m/s
 sight_range = 20  # 判断有无障碍物的视野距离
+brake_dist = 5    # 需要brake的dist
+obs_lat_range = 2   # 障碍物与障碍物match_point的横向间距
 ttcs = [3, 4, 5]  # static ascending time-to-collision, sec
 # ttcs = [-0.5, 0, 0.5]  ### change this u should also change line 682 605 878 now means acc
 theta_thr = M_PI / 6  # delta theta threshold, deviation from matched path
